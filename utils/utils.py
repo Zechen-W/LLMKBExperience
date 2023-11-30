@@ -17,6 +17,7 @@ logger = logging.getLogger()
 def has_answer(answers, text, match_type="string"):
     class Tokens(object):
         """A class to represent a list of tokenized text."""
+
         TEXT = 0
         TEXT_WS = 1
         SPAN = 2
@@ -36,12 +37,12 @@ def has_answer(answers, text, match_type="string"):
         def slice(self, i=None, j=None):
             """Return a view of the list of tokens from [i, j)."""
             new_tokens = copy.copy(self)
-            new_tokens.data = self.data[i: j]
+            new_tokens.data = self.data[i:j]
             return new_tokens
 
         def untokenize(self):
             """Returns the original text (with whitespace reinserted)."""
-            return ''.join([t[self.TEXT_WS] for t in self.data]).strip()
+            return "".join([t[self.TEXT_WS] for t in self.data]).strip()
 
         def words(self, uncased=False):
             """Returns a list of the text of each token
@@ -61,7 +62,7 @@ def has_answer(answers, text, match_type="string"):
             """Returns a list of part-of-speech tags of each token.
             Returns None if this annotation was not included.
             """
-            if 'pos' not in self.annotators:
+            if "pos" not in self.annotators:
                 return None
             return [t[self.POS] for t in self.data]
 
@@ -69,7 +70,7 @@ def has_answer(answers, text, match_type="string"):
             """Returns a list of the lemmatized text of each token.
             Returns None if this annotation was not included.
             """
-            if 'lemma' not in self.annotators:
+            if "lemma" not in self.annotators:
                 return None
             return [t[self.LEMMA] for t in self.data]
 
@@ -77,7 +78,7 @@ def has_answer(answers, text, match_type="string"):
             """Returns a list of named-entity-recognition tags of each token.
             Returns None if this annotation was not included.
             """
-            if 'ner' not in self.annotators:
+            if "ner" not in self.annotators:
                 return None
             return [t[self.NER] for t in self.data]
 
@@ -97,14 +98,16 @@ def has_answer(answers, text, match_type="string"):
                 return filter_fn(gram)
 
             words = self.words(uncased)
-            ngrams = [(s, e + 1)
-                    for s in range(len(words))
-                    for e in range(s, min(s + n, len(words)))
-                    if not _skip(words[s:e + 1])]
+            ngrams = [
+                (s, e + 1)
+                for s in range(len(words))
+                for e in range(s, min(s + n, len(words)))
+                if not _skip(words[s : e + 1])
+            ]
 
             # Concatenate into strings
             if as_strings:
-                ngrams = ['{}'.format(' '.join(words[s:e])) for (s, e) in ngrams]
+                ngrams = ["{}".format(" ".join(words[s:e])) for (s, e) in ngrams]
 
             return ngrams
 
@@ -113,7 +116,7 @@ def has_answer(answers, text, match_type="string"):
             entities = self.entities()
             if not entities:
                 return None
-            non_ent = self.opts.get('non_ent', 'O')
+            non_ent = self.opts.get("non_ent", "O")
             groups = []
             idx = 0
             while idx < len(entities):
@@ -122,13 +125,12 @@ def has_answer(answers, text, match_type="string"):
                 if ner_tag != non_ent:
                     # Chomp the sequence
                     start = idx
-                    while (idx < len(entities) and entities[idx] == ner_tag):
+                    while idx < len(entities) and entities[idx] == ner_tag:
                         idx += 1
                     groups.append((self.slice(start, idx).untokenize(), ner_tag))
                 else:
                     idx += 1
             return groups
-
 
     class Tokenizer(object):
         """Base tokenizer class.
@@ -144,10 +146,9 @@ def has_answer(answers, text, match_type="string"):
         def __del__(self):
             self.shutdown()
 
-
     class SimpleTokenizer(Tokenizer):
-        ALPHA_NUM = r'[\p{L}\p{N}\p{M}]+'
-        NON_WS = r'[^\p{Z}\p{C}]'
+        ALPHA_NUM = r"[\p{L}\p{N}\p{M}]+"
+        NON_WS = r"[^\p{Z}\p{C}]"
 
         def __init__(self, **kwargs):
             """
@@ -155,12 +156,14 @@ def has_answer(answers, text, match_type="string"):
                 annotators: None or empty set (only tokenizes).
             """
             self._regexp = regex.compile(
-                '(%s)|(%s)' % (self.ALPHA_NUM, self.NON_WS),
-                flags=regex.IGNORECASE + regex.UNICODE + regex.MULTILINE
+                "(%s)|(%s)" % (self.ALPHA_NUM, self.NON_WS),
+                flags=regex.IGNORECASE + regex.UNICODE + regex.MULTILINE,
             )
-            if len(kwargs.get('annotators', {})) > 0:
-                logger.warning('%s only tokenizes! Skipping annotators: %s' %
-                            (type(self).__name__, kwargs.get('annotators')))
+            if len(kwargs.get("annotators", {})) > 0:
+                logger.warning(
+                    "%s only tokenizes! Skipping annotators: %s"
+                    % (type(self).__name__, kwargs.get("annotators"))
+                )
             self.annotators = set()
 
         def tokenize(self, text):
@@ -179,23 +182,25 @@ def has_answer(answers, text, match_type="string"):
                     end_ws = span[1]
 
                 # Format data
-                data.append((
-                    token,
-                    text[start_ws: end_ws],
-                    span,
-                ))
+                data.append(
+                    (
+                        token,
+                        text[start_ws:end_ws],
+                        span,
+                    )
+                )
             return Tokens(data, self.annotators)
 
     tokenizer = SimpleTokenizer()
-    text = unicodedata.normalize('NFD', text)
-    if match_type == 'string':
+    text = unicodedata.normalize("NFD", text)
+    if match_type == "string":
         text = tokenizer.tokenize(text).words(uncased=True)
         for single_answer in answers:
-            single_answer = unicodedata.normalize('NFD', single_answer)
+            single_answer = unicodedata.normalize("NFD", single_answer)
             single_answer = tokenizer.tokenize(single_answer)
             single_answer = single_answer.words(uncased=True)
             for i in range(0, len(text) - len(single_answer) + 1):
-                if single_answer == text[i: i+ len(single_answer)]:
+                if single_answer == text[i : i + len(single_answer)]:
                     return 1
     return 0
 
@@ -216,18 +221,31 @@ def _normalize_answer(s):
 
     return white_space_fix(remove_articles(remove_punc(lower(s))))
 
+
 def EM_compute(answer_list, prediction):
-    return max([int(_normalize_answer(prediction) == _normalize_answer(ground_truth)) for ground_truth in answer_list])
+    em = max(
+        [
+            int(_normalize_answer(ground_truth) in _normalize_answer(prediction))
+            for ground_truth in answer_list
+        ]
+    )  # llm废话太多了
+    # import pdb
+    # pdb.set_trace()
+    return em
+
 
 def F1_compute(answers, pred):
     def get_tokens(s):
-        if not s: return []
+        if not s:
+            return []
         return _normalize_answer(s).split()
 
     def compute_f1(a_gold, a_pred):
         gold_toks = get_tokens(a_gold)
         pred_toks = get_tokens(a_pred)
         common = collections.Counter(gold_toks) & collections.Counter(pred_toks)
+        # import pdb
+        # pdb.set_trace()
         num_same = sum(common.values())
         if len(gold_toks) == 0 or len(pred_toks) == 0:
             # If either is no-answer, then F1 is 1 if they agree, 0 otherwise
@@ -238,30 +256,59 @@ def F1_compute(answers, pred):
         recall = 1.0 * num_same / len(gold_toks)
         f1 = (2 * precision * recall) / (precision + recall)
         return f1
+
     return max([compute_f1(x, pred) for x in answers])
 
 
 def deal_judge(pred):
     if pred is None:
         return True
-    if has_answer(["unknown", "no specific answer", "not provide", "cannot answer", "no information provided", "no answer", "not contain", "no definitive answer"], pred):
+    if has_answer(
+        [
+            "unknown",
+            "no specific answer",
+            "not provide",
+            "cannot answer",
+            "no information provided",
+            "no answer",
+            "not contain",
+            "no definitive answer",
+        ],
+        pred,
+    ):
         return True
     return False
 
 
 def deal_answer(pred, answers):
+    # import pdb
+    # pdb.set_trace()
     if pred is None:
         return 0, 0
-    if pred.lower().startswith("answer:"):
+    if pred.lower().startswith("answer:"):  # chat需要掐头去尾
         pred = pred[7:]
     return EM_compute(answers, pred), F1_compute(answers, pred)
-        
+
 
 def deal_post(pred):
     giveup, istrue = True, None
     if pred is None:
         return giveup, istrue
-    if has_answer(["unclear", "not clear", "unknown", "partially correct", "partially incorrect", "not correct", "cannot determine", "cannot answer", "not incorrect", "incomplete"], pred):
+    if has_answer(
+        [
+            "unclear",
+            "not clear",
+            "unknown",
+            "partially correct",
+            "partially incorrect",
+            "not correct",
+            "cannot determine",
+            "cannot answer",
+            "not incorrect",
+            "incomplete",
+        ],
+        pred,
+    ):
         giveup = True
     elif has_answer(["correct", "true"], pred):
         giveup, istrue = False, True
@@ -273,42 +320,44 @@ def deal_post(pred):
 
 
 def str2paras(s):
-        if s is None:
-            return None
-        paras = []
-        for text in s.split('\n'):
-            if text.strip() != '':
-                paras.append(": " + text)
-        return paras
+    if s is None:
+        return None
+    paras = []
+    for text in s.split("\n"):
+        if text.strip() != "":
+            paras.append(": " + text)
+    return paras
 
 
 if __name__ == "__main__":
-    file_list = os.listdir('d:/pycharmfiles/chat')
+    file_list = os.listdir("d:/pycharmfiles/chat")
 
     for file in file_list:
-        if not file.endswith('post'):
+        if not file.endswith("post"):
             continue
         print(file)
-        indir = os.path.join('d:/pycharmfiles/chat', file)
-        outdir = os.path.join('d:/pycharmfiles/llm_re/nq/data', file)
+        indir = os.path.join("d:/pycharmfiles/chat", file)
+        outdir = os.path.join("d:/pycharmfiles/llm_re/nq/data", file)
         outstr = ""
-        infile = open(indir, 'r', encoding='utf-8')
+        infile = open(indir, "r", encoding="utf-8")
         for line in tqdm(infile.readlines()):
             d = json.loads(line)
-            if 'Prediction' in d.keys():
-                d['Giveup'], d['EM'], d['F1'] =  deal_answer(d['Prediction'], d['reference'])
-            if 'Post' in d.keys():
-                d['Post_Giveup'], d['Post_True']= deal_post(d['Post'])
-            outstr += json.dumps(d) + '\n'
+            if "Prediction" in d.keys():
+                d["Giveup"], d["EM"], d["F1"] = deal_answer(
+                    d["Prediction"], d["reference"]
+                )
+            if "Post" in d.keys():
+                d["Post_Giveup"], d["Post_True"] = deal_post(d["Post"])
+            outstr += json.dumps(d) + "\n"
         infile.close()
-        outfile = open(outdir, 'w', encoding='utf-8')
+        outfile = open(outdir, "w", encoding="utf-8")
         outfile.write(outstr)
         outfile.close()
 
 
 def load_source(file):
     data = []
-    f = open(file, 'r', encoding='utf-8')
+    f = open(file, "r", encoding="utf-8")
     for line in f.readlines():
         data.append(json.loads(line))
     f.close()

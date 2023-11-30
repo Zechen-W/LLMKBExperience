@@ -1,1 +1,4 @@
 data/
+__pycache__/
+logs/
+OPENAI_API_KEY.txt

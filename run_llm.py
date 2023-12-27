@@ -1,4 +1,5 @@
 import os
+import pdb
 from tqdm import tqdm
 import json
 import logging
@@ -7,14 +8,14 @@ from utils.utils import load_source
 from utils.llm import get_llm_result, get_llama_result, get_chatglm_result
 from utils.prompt import get_prompt
 from utils.utils import deal_answer, deal_judge, deal_post, str2paras
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, AutoConfig
 import openai
 import time
 import transformers
 from transformers import GenerationConfig, LlamaForCausalLM, LlamaTokenizer
 import torch
 from tqdm import trange
-
+from train_roberta import RobertaCLS
 
 ra_dict = {
     "none": "none",
@@ -88,6 +89,23 @@ def calculate_average_score(file_path):
 
 def main():
     args = get_args()
+
+    device = f"cuda:{args.gpu}"
+    print("using device: " + device)
+
+    rank_tokenizer = None
+    rank_model = None
+    if args.rank:
+        print("---------------loading Roberta for ranking----------------")
+        rank_checkpoint = "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/roberta_weights/roberta-base"
+        rank_tokenizer = AutoTokenizer.from_pretrained(
+            rank_checkpoint, model_max_length=512
+        )
+        config = AutoConfig.from_pretrained(rank_checkpoint)
+        rank_model = RobertaCLS(config).to(device)
+        rank_model.load_state_dict(torch.load(args.roberta_weight_path))
+        rank_model.to(device)
+
     begin = 0
     if os.path.exists(args.outfile):
         outfile = open(args.outfile, "r", encoding="utf-8")
@@ -103,10 +121,6 @@ def main():
     num_output = 0
 
     # llama
-    device = f"cuda:{args.gpu}"
-
-    print("training on " + device)
-
     if args.model == "llama":
         print("-------------------using llama as model--------------------------")
 
@@ -150,7 +164,7 @@ def main():
 
     try:
         for sample in tqdm(all_data[begin:], desc="Filename: %s" % args.outfile):
-            prompt = get_prompt(sample, args)
+            prompt = get_prompt(sample, rank_tokenizer, rank_model, args)
             if args.model == "chatgpt":
                 sample = get_llm_result(prompt, args.usechat, sample, args.type)
 

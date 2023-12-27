@@ -18,10 +18,8 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
 
-checkpoint = (
-    "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/roberta_weights/roberta-base"
-)
-tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+checkpoint = "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/roberta_weights/roberta-base"
+tokenizer = AutoTokenizer.from_pretrained(checkpoint, model_max_length=512)
 
 
 def seed_everything(seed=1029):
@@ -47,7 +45,7 @@ class RobertaDataset(Dataset):
             idx = 0
             for line in lines:
                 sample = json.loads(line.strip())
-                if sample["score"].isnumeric():
+                if sample["score"].isnumeric() and int(sample["score"]) in range(0, 6):
                     Data[idx] = sample
                     idx += 1
         return Data
@@ -139,14 +137,14 @@ def main():
     epoch_num = 10
 
     train_data = RobertaDataset(
-        "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/data/part_qa_pair_scores_5.jsonl"
+        "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/data/roberta_data/train.jsonl"
     )
     train_dataloader = DataLoader(
         train_data, batch_size=batch_size, shuffle=True, collate_fn=collote_fn
     )
 
     valid_data = RobertaDataset(
-        "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/data/part_qa_pair_scores_1.jsonl"
+        "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/data/roberta_data/test.jsonl"
     )
     valid_dataloader = DataLoader(
         valid_data, batch_size=batch_size, shuffle=False, collate_fn=collote_fn

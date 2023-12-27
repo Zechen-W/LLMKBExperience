@@ -6,3 +6,5 @@ connect_openai.py
 temp*
 .vscode/
 roberta_weights/
+*.png
+test*.sh

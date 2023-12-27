@@ -2,6 +2,7 @@ import numpy as np
 from transformers import AutoTokenizer, AutoConfig
 import torch
 from train_roberta import RobertaCLS
+import pdb
 
 prompt_dict = {
     "qa": {
@@ -26,22 +27,32 @@ prompt_dict = {
     },
 }
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
 
 def roberta_rank(question, docs, tokenizer, model):
-    X = tokenizer(
-        [question] * len(docs),
-        docs,
-        padding=True,
-        truncation=True,
-        return_tensors="pt",
-    ).to(device)
+    len_group = 10
+    n_group = (
+        len(docs) // len_group
+        if len(docs) % len_group == 0
+        else len(docs) // len_group + 1
+    )
 
-    pred = model(X).argmax(1)
+    doc_group = []
+    for i in range(n_group):
+        doc_group.append(docs[i * len_group : (i + 1) * len_group])
+
+    pred = torch.tensor([]).to(model.device)
+    for i in range(n_group):
+        X = tokenizer(
+            [question] * len(doc_group[i]),
+            doc_group[i],
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+        ).to(model.device)
+        pred = torch.cat((pred, model(X).argmax(1)))
 
     # 使用NumPy.argsort按照权重从大到小排序docs
-    sorted_docs_indices = np.argsort(pred)[::-1]
+    sorted_docs_indices = np.argsort(pred.cpu().numpy())[::-1]
 
     # 根据排序的索引重排docs列表
     sorted_docs = [docs[i] for i in sorted_docs_indices]
@@ -54,28 +65,18 @@ def roberta_rank(question, docs, tokenizer, model):
     # docs : list ["23123214","ntest to complete Polk's term, and"]
 
 
-def get_prompt(sample, args):
+def get_prompt(sample, tokenizer, rank_model, args):
     paras = ""
     prompt = prompt_dict[args.type]["none"]
-    # roberta rank时用
-    if args.rank:
-        print("---------------loading Roberta for ranking----------------")
-        checkpoint = "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/roberta_weights/roberta-base"
-        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-        config = AutoConfig.from_pretrained(checkpoint)
-        model = RobertaCLS(config).to(device)
-        model.load_state_dict(torch.load(args.roberta_weight_path)).to(device)
-
     if args.ra != "none":
         ra_dict = args.ra
         i = 0
         doc = []
-
         for k, v in ra_dict.items():
             v = min(v, len(sample[k]))
             if args.rank:
                 sample[k] = roberta_rank(
-                    sample["question"], sample[k], tokenizer, model
+                    sample["question"], sample[k], tokenizer, rank_model
                 )
 
             for j in range(v):

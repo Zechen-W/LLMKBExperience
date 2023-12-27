@@ -4,7 +4,7 @@ import json
 import logging
 import argparse
 from utils.utils import load_source
-from utils.llm import get_llm_result
+from utils.llm import get_llm_result, get_llama_result, get_chatglm_result
 from utils.prompt import get_prompt
 from utils.utils import deal_answer, deal_judge, deal_post, str2paras
 from transformers import AutoTokenizer, AutoModel
@@ -32,6 +32,11 @@ ra_dict = {
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=str, default="data/source/nq.json")
+    parser.add_argument(
+        "--roberta_weight_path",
+        type=str,
+        default="/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/roberta_weights/epoch_1_valid_acc_40.2_model_weights.bin",
+    )
     parser.add_argument("--usechat", action="store_true")
     parser.add_argument("--rank", action="store_true")
     parser.add_argument(
@@ -42,7 +47,7 @@ def get_args():
         "--model",
         type=str,
         choices=["chatglm", "llama", "chatgpt", "llama2"],
-        default="llama",
+        default="chatgpt",
     )
     parser.add_argument("--ra", type=str, default="none", choices=ra_dict.keys())
     parser.add_argument("--outfile", type=str, default="data/qa/chatgpt-nq-none.json")
@@ -56,108 +61,6 @@ def get_args():
     args.ra = ra_dict[args.ra]
 
     return args
-
-
-def get_llama_result(prompt, chat, sample, deal_type, model, tokenizer, args):
-    # 处理访问频率过高的情况
-    def get_res(prompt, chat=True, gen=False):
-        # while True:
-        encoded_inputs = tokenizer(prompt, return_tensors="pt", padding=True)
-        input_ids = encoded_inputs["input_ids"].to(device)
-        attention_mask = encoded_inputs["attention_mask"].to(device)
-
-        if input_ids.shape[1] > 100:
-            input_ids = input_ids[:, -100:]
-            attention_mask = attention_mask[:, -100:]
-
-        with torch.no_grad():
-            generation_output = model.generate(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                max_new_tokens=20,
-                temperature=0.8,
-                num_beams=1,
-                return_dict_in_generate=True,
-                output_scores=True,
-                # repetition_penalty=2.5,
-                # length_penalty=1.0,
-                early_stopping=True,
-            )
-        s = generation_output.sequences[0]
-        output = tokenizer.decode(s)
-        res = [output]
-        # import pdb
-        # pdb.set_trace()
-
-        return res
-
-    def request_process(prompt, chat, sample, deal_type):
-        gen = deal_type == "generate"
-        res = get_res(prompt, chat=chat, gen=gen)
-        prediction = None
-        prediction = res[0] if res is not None else None
-        # import pdb
-        # pdb.set_trace()
-        if deal_type == "post":
-            sample["post_prompt"] = prompt
-            sample["Post"] = prediction
-            sample["Post_Giveup"], sample["Post_True"] = deal_post(prediction)
-        elif deal_type == "qa":
-            sample["qa_prompt"] = prompt
-            sample["Prediction"] = prediction
-            sample["EM"], sample["F1"] = deal_answer(prediction, sample["reference"])
-        elif deal_type == "prior":
-            sample["prior_prompt"] = prompt
-            sample["Prior"] = prediction
-            sample["Giveup"] = deal_judge(prediction)
-        elif deal_type == "generate":
-            sample["gen_prompt"] = prompt
-            sample["gen_response"] = prediction
-            sample["gen_ctxs"] = str2paras(prediction)
-        return sample
-
-    device = f"cuda:{args.gpu}"
-    return request_process(prompt, chat, sample, deal_type)
-
-
-def get_chatglm_result(prompt, chat, sample, deal_type, model, tokenizer):
-    # 处理访问频率过高的情况
-    def get_res(prompt, chat=True, gen=False):
-        # while True:
-
-        response, history = model.chat(tokenizer, prompt, history=[])
-        # import pdb
-        # pdb.set_trace()
-
-        return [response]
-
-    def request_process(prompt, chat, sample, deal_type):
-        gen = deal_type == "generate"
-        res = get_res(prompt, chat=chat, gen=gen)
-        prediction = None
-        prediction = res[0] if res is not None else None
-        # import pdb
-        # pdb.set_trace()
-        if deal_type == "post":
-            sample["post_prompt"] = prompt
-            sample["Post"] = prediction
-            sample["Post_Giveup"], sample["Post_True"] = deal_post(prediction)
-        elif deal_type == "qa":
-            sample["qa_prompt"] = prompt
-            sample["Prediction"] = prediction
-            sample["EM"], sample["F1"] = deal_answer(prediction, sample["reference"])
-        elif deal_type == "prior":
-            sample["prior_prompt"] = prompt
-            sample["Prior"] = prediction
-            sample["Giveup"] = deal_judge(prediction)
-        elif deal_type == "generate":
-            sample["gen_prompt"] = prompt
-            sample["gen_response"] = prediction
-            sample["gen_ctxs"] = str2paras(prediction)
-        return sample
-
-    # device = f"cuda:{args.gpu}"
-    return request_process(prompt, chat, sample, deal_type)
 
 
 def calculate_average_score(file_path):
@@ -207,7 +110,7 @@ def main():
     if args.model == "llama":
         print("-------------------using llama as model--------------------------")
 
-        path = "/home/sxs2022/PretrainedModel/llama-7b-hf"
+        path = "/newdisk/pubmodel/llama/llama-7b"
         model = transformers.AutoModelForCausalLM.from_pretrained(path)
 
         tokenizer = LlamaTokenizer.from_pretrained(path)
@@ -219,7 +122,7 @@ def main():
     elif args.model == "llama2":
         print("-------------------using llama2 as model--------------------------")
 
-        path = "/home/sxs2022/PretrainedModel/Llama-2-7b-chat-hf"
+        path = "/newdisk/pubmodel/llama/Llama-2-7b-hf"
         model = transformers.AutoModelForCausalLM.from_pretrained(path)
 
         tokenizer = LlamaTokenizer.from_pretrained(path)
@@ -231,31 +134,31 @@ def main():
     elif args.model == "chatglm":
         print("-------------------using chatglm2 as model--------------------------")
         tokenizer = AutoTokenizer.from_pretrained(
-            "/home/sxs2022/PretrainedModel/ChatGLM2-6B", trust_remote_code=True
+            "/newdisk/pubmodel/chatglm/ChatGLM2-6B", trust_remote_code=True
         )
         model = (
             AutoModel.from_pretrained(
-                "/home/sxs2022/PretrainedModel/ChatGLM2-6B", trust_remote_code=True
+                "/newdisk/pubmodel/chatglm/ChatGLM2-6B", trust_remote_code=True
             )
             .half()
             .cuda()
         )
         model = model.to(device)
         model = model.eval()
-        # response, history = model.chat(tokenizer, "你好", history=[])
-        # print(response)
+    else:
+        print("-------------------using chatgpt as model--------------------------")
 
     try:
         for sample in tqdm(all_data[begin:], desc="Filename: %s" % args.outfile):
             prompt = get_prompt(sample, args)
-            # import pdb
-            # pdb.set_trace()
-            # sample = get_llm_result(prompt, args.usechat, sample, args.type)
-            if args.model == "llama" or args.model == "llama2":
+            if args.model == "chatgpt":
+                sample = get_llm_result(prompt, args.usechat, sample, args.type)
+
+            elif args.model == "llama" or args.model == "llama2":
                 sample = get_llama_result(
                     prompt, args.usechat, sample, args.type, model, tokenizer, args
                 )
-            if args.model == "chatglm":
+            elif args.model == "chatglm":
                 sample = get_chatglm_result(
                     prompt, args.usechat, sample, args.type, model, tokenizer
                 )

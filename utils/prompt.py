@@ -1,6 +1,7 @@
-from transformers import RobertaTokenizer, RobertaModel
-import torch
 import numpy as np
+from transformers import AutoTokenizer, AutoConfig
+import torch
+from train_roberta import RobertaCLS
 
 prompt_dict = {
     "qa": {
@@ -25,30 +26,28 @@ prompt_dict = {
     },
 }
 
-
-def encode_text(text):
-    input_ids = tokenizer.encode(text, add_special_tokens=True)
-    input_ids = torch.tensor(input_ids).unsqueeze(0)
-    return input_ids
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 
-def roberta_rank(question, docs):
-    # TODO ROBERTa 排序q 与 docs
+def roberta_rank(question, docs, tokenizer, model):
+    X = tokenizer(
+        [question] * len(docs),
+        docs,
+        padding=True,
+        truncation=True,
+        return_tensors="pt",
+    ).to(device)
 
-    encoded_question = encode_text(question)
-    encoded_docs = [encode_text(doc) for doc in docs]
+    pred = model(X).argmax(1)
 
-    question_embeddings = model(encoded_question)[0][:, 0, :]
-    doc_embeddings = [model(encoded_doc)[0][:, 0, :] for encoded_doc in encoded_docs]
+    # 使用NumPy.argsort按照权重从大到小排序docs
+    sorted_docs_indices = np.argsort(pred)[::-1]
 
-    sims = []
-    for doc_embedding in doc_embeddings:
-        sim = np.inner(
-            question_embeddings.detach().numpy(), doc_embedding.detach().numpy()
-        )
-        sims.append(sim)
+    # 根据排序的索引重排docs列表
+    sorted_docs = [docs[i] for i in sorted_docs_indices]
 
-    sorted_docs = [doc for _, doc in sorted(zip(sims, docs), reverse=True)]
+    # 输出排序后的docs
+
     return sorted_docs
 
     # question : str 'what was the result of the revolt of 1857'
@@ -61,8 +60,12 @@ def get_prompt(sample, args):
     # roberta rank时用
     if args.rank:
         print("---------------loading Roberta for ranking----------------")
-        tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
-        model = TFRobertaModel.from_pretrained("roberta-base")
+        checkpoint = "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/roberta_weights/roberta-base"
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        config = AutoConfig.from_pretrained(checkpoint)
+        model = RobertaCLS(config).to(device)
+        model.load_state_dict(torch.load(args.roberta_weight_path)).to(device)
+
     if args.ra != "none":
         ra_dict = args.ra
         i = 0
@@ -88,6 +91,4 @@ def get_prompt(sample, args):
         prompt.format(question=sample["question"], paras=paras, prediction=prediction)
         + tail
     )
-    # import pdb
-    # pdb.set_trace()
     return prompt

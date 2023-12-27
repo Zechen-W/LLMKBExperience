@@ -1,4 +1,4 @@
-# OPENAI_API_KEY=`cat /home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/OPENAI_API_KEY.txt`\
+# OPENAI_API_KEY=`cat /home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/OPENAI_API_KEY.txt`
 
 
 # # generate

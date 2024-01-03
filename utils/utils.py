@@ -244,8 +244,6 @@ def F1_compute(answers, pred):
         gold_toks = get_tokens(a_gold)
         pred_toks = get_tokens(a_pred)
         common = collections.Counter(gold_toks) & collections.Counter(pred_toks)
-        # import pdb
-        # pdb.set_trace()
         num_same = sum(common.values())
         if len(gold_toks) == 0 or len(pred_toks) == 0:
             # If either is no-answer, then F1 is 1 if they agree, 0 otherwise
@@ -281,8 +279,6 @@ def deal_judge(pred):
 
 
 def deal_answer(pred, answers):
-    # import pdb
-    # pdb.set_trace()
     if pred is None:
         return 0, 0
     if pred.lower().startswith("answer:"):  # chat需要掐头去尾

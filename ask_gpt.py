@@ -1,9 +1,10 @@
-from collections.abc import Callable, Iterable, Mapping
-from typing import Any
 import jsonlines
-from connect_openai import call_api
+from sympy import false
+from connect_openai import CallFailException, call_api
 from tqdm import tqdm
 import threading
+from utils.prompt import prompt_dict
+from utils.utils import deal_answer
 
 
 def prompt(q, ctx):
@@ -18,15 +19,53 @@ Note that your answer should contain only a number and nothing else.
 
 def ask_part(lines, n_part):
     with jsonlines.open(
-        f"./data/part_qa_pair_scores_{n_part}.jsonl", "w"
+        f"/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/data/roberta_data/part_qa_pair_compare_{n_part}.jsonl",
+        "w",
     ) as fout, tqdm(total=len(lines)) as pbar:
+        last_q_id = None
         for line in lines:
             line = eval(line)
-            score = call_api(prompt(line["question"], line["ctx"]))
-            line["score"] = score
-            fout.write(line)
-            pbar.set_postfix_str(f"score: {score}")
-            pbar.update(1)
+            # 如果更新了问题，不检索直接问
+            if line["q_id"] != last_q_id:
+                prompt = prompt_dict["qa"]["none"].format(
+                    question=line["question"], paras="", prediction=""
+                )
+                # 不带passage直接问，一定要调用成功
+                success = False
+                while not success:
+                    try:
+                        before_answer = call_api(prompt)
+                        success = True
+                    except CallFailException as e:
+                        print(e.message)
+                before_em, before_f1 = deal_answer(before_answer, line["reference"])
+            line["before"] = {
+                "answer": before_answer,
+                "em": before_em,
+                "f1": before_f1,
+            }
+            # 带检索问，可以不成功，不成功就丢弃
+            prompt = prompt_dict["qa"]["ra"].format(
+                question=line["question"], paras=line["ctx"], prediction=""
+            )
+            try:
+                answer = call_api(prompt)
+                em, f1 = deal_answer(answer, line["reference"])
+                line["after"] = {"answer": answer, "em": em, "f1": f1}
+
+                # 0：错错 1：错对 2：对错 3：对对
+                category = (int(before_f1 > 0.5) << 1) + int(f1 > 0.5)
+                line["category"] = category
+                fout.write(line)
+                pbar.set_postfix_str(f"category: {category}")
+            except CallFailException as e:
+                print(e.message)
+                print("达到最大重试次数，丢弃此数据")
+                continue
+            finally:
+                last_q_id = line["q_id"]
+
+                pbar.update(1)
 
 
 def main():
@@ -48,9 +87,9 @@ def main():
         threading.Thread(
             target=ask_part, name="wzcThread-4", args=(lines[n * 3 : n * 4], 4)
         ).start()
-        # threading.Thread(
-        #     target=ask_part, name="wzcThread-5", args=(lines[n * 4 :], 5)
-        # ).start()
+        threading.Thread(
+            target=ask_part, name="wzcThread-5", args=(lines[n * 4 :], 5)
+        ).start()
 
 
 if __name__ == "__main__":

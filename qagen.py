@@ -4,7 +4,7 @@ import random
 
 # with open(
 #     "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/data/source/nq.json"
-# ) as fin, jsonlines.open("./data/qa_pair.jsonl", "w") as fout:
+# ) as fin, jsonlines.open("./data/roberta_data/qa_pair.jsonl", "w") as fout:
 #     line_id = 0
 #     while True:
 #         line = fin.readline()
@@ -13,15 +13,24 @@ import random
 #         line = eval(line)
 #         q_id = line["id"]
 #         question = line["question"]
+#         reference = line["reference"]
 #         ctx_set = set()
 #         for ctx in line["dense_ctxs"] + line["sparse_ctxs"]:
 #             if ctx not in ctx_set:
 #                 ctx_set.add(ctx)
-#                 fout.write(dict(line_id=line_id, q_id=q_id, question=question, ctx=ctx))
+#                 fout.write(
+#                     dict(
+#                         line_id=line_id,
+#                         q_id=q_id,
+#                         question=question,
+#                         reference=reference,
+#                         ctx=ctx,
+#                     )
+#                 )
 #                 line_id += 1
 
-with jsonlines.open("./data/qa_pair.jsonl", "r") as fin, jsonlines.open(
-    "./data/part_qa_pair.jsonl", "w"
+with jsonlines.open("./data/roberta_data/qa_pair.jsonl", "r") as fin, jsonlines.open(
+    "./data/roberta_data/part_qa_pair.jsonl", "w"
 ) as fout:
     random.seed(0)
     line_list = []

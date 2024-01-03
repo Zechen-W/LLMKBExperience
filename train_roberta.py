@@ -9,7 +9,7 @@ from transformers import AutoTokenizer, AutoConfig
 from transformers import RobertaPreTrainedModel, RobertaModel
 from transformers import AdamW, get_scheduler
 from tqdm.auto import tqdm
-
+from torch.utils.tensorboard import SummaryWriter
 import os
 
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -20,6 +20,9 @@ print(f"Using {device} device")
 
 checkpoint = "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/roberta_weights/roberta-base"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint, model_max_length=512)
+writer = SummaryWriter(
+    "/home/wzc2022/dgt_workspace/LLM-Knowledge-alignment-dgt/logs/tensorboard"
+)
 
 
 def seed_everything(seed=1029):
@@ -101,11 +104,13 @@ def train_loop(dataloader, model, loss_fn, optimizer, lr_scheduler, epoch, total
         X, y = X.to(device), y.to(device)
         pred = model(X)
         loss = loss_fn(pred, y)
+        writer.add_scalar("loss", loss, step + finish_step_num)
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        lr_scheduler.step()
+        if lr_scheduler is not None:
+            lr_scheduler.step()
 
         total_loss += loss.item()
         progress_bar.set_description(f"loss: {total_loss/(finish_step_num + step):>7f}")
@@ -132,7 +137,7 @@ def test_loop(dataloader, model, mode="Test"):
 
 def main():
     seed_everything(42)
-    learning_rate = 1e-5
+    learning_rate = 1e-4
     batch_size = 4
     epoch_num = 10
 
@@ -169,13 +174,16 @@ def main():
         total_loss = train_loop(
             train_dataloader, model, loss_fn, optimizer, lr_scheduler, t + 1, total_loss
         )
+        train_acc = test_loop(train_dataloader, model, mode="Valid")
+        writer.add_scalar("acc/train_acc", train_acc, t + 1)
         valid_acc = test_loop(valid_dataloader, model, mode="Valid")
+        writer.add_scalar("acc/valid_acc", valid_acc, t + 1)
         if valid_acc > best_acc:
             best_acc = valid_acc
             print("saving new weights...\n")
             torch.save(
                 model.state_dict(),
-                f"./roberta_weights/epoch_{t+1}_valid_acc_{(100*valid_acc):0.1f}_model_weights.bin",
+                f"./roberta_weights/0-5/epoch_{t+1}_valid_acc_{(100*valid_acc):0.1f}_model_weights.bin",
             )
     print("Done!")
 

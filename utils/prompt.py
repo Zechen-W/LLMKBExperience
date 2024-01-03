@@ -1,7 +1,5 @@
 import numpy as np
-from transformers import AutoTokenizer, AutoConfig
 import torch
-from train_roberta import RobertaCLS
 import pdb
 
 prompt_dict = {
